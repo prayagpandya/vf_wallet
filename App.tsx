@@ -1,20 +1,27 @@
+import React from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ShareIntentProvider } from 'expo-share-intent';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { AuthProvider } from './src/context/AuthContext';
+import { WalletProvider } from './src/context/WalletContext';
+import { AppNavigator } from './src/navigation/AppNavigator';
+
+const isExpoGo =
+  Constants.appOwnership === 'expo' ||
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 export default function App() {
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <SafeAreaProvider>
+      <StatusBar style="dark" />
+      <ShareIntentProvider options={{ disabled: isExpoGo }}>
+        <AuthProvider>
+          <WalletProvider>
+            <AppNavigator />
+          </WalletProvider>
+        </AuthProvider>
+      </ShareIntentProvider>
+    </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

@@ -1,25 +1,62 @@
 {
   "expo": {
-    "name": "VF_Wallet",
-    "slug": "VF_Wallet",
+    "name": "VF Wallet",
+    "slug": "vf-wallet",
     "version": "1.0.0",
+    "scheme": "vfwallet",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#1769E8",
+      "resizeMode": "contain"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vfwallet.app"
     },
     "android": {
+      "package": "com.vfwallet.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#1769E8",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "SEND",
+          "data": [
+            {
+              "mimeType": "image/*"
+            }
+          ],
+          "category": ["DEFAULT"]
+        },
+        {
+          "action": "SEND_MULTIPLE",
+          "data": [
+            {
+              "mimeType": "image/*"
+            }
+          ],
+          "category": ["DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app needs access to your photos to allow uploading payment deposit screenshots."
+        }
+      ],
+      "expo-share-intent"
+    ]
   }
 }
