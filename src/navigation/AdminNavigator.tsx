@@ -2,10 +2,12 @@ import React from 'react';
 import { Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
 import { useAuth } from '../hooks/useAuth';
 import { useEmployeeLocationTracker } from '../hooks/useEmployeeLocationTracker';
+import { getAdaptiveTabBarStyle } from '../utils/navigationBar';
 
 import { AdminDashboard } from '../screens/admin/AdminDashboard';
 import { UserManagementScreen } from '../screens/admin/UserManagementScreen';
@@ -46,6 +48,8 @@ const Stack = createNativeStackNavigator<AdminStackParamList>();
 
 const AdminTabNavigator = () => {
   const { isSuperAdmin, permissions } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { tabBarStyle } = getAdaptiveTabBarStyle(insets);
   useEmployeeLocationTracker();
 
   const canViewClients =
@@ -62,19 +66,7 @@ const AdminTabNavigator = () => {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: {
-          backgroundColor: colors.white,
-          borderTopColor: colors.cardBorder,
-          borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 86 : 64,
-          paddingBottom: Platform.OS === 'ios' ? 24 : 10,
-          paddingTop: 8,
-          shadowColor: colors.shadowColor,
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.05,
-          shadowRadius: 8,
-          elevation: 8,
-        },
+        tabBarStyle,
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: '600',

@@ -11,6 +11,7 @@ import {
 import { getRunningDailyBonusRate } from '../utils/dailyBonus';
 import {
   createAppResetBackup,
+  createSingleClientBackup,
   createSingleTransactionBackup,
   getAllBackupSnapshots,
   restoreBackupSnapshot,
@@ -294,7 +295,9 @@ export const getAllUsers = async (req: AuthenticatedRequest, res: Response) => {
 
     const { search, isBlocked, role, page, limit } = req.query;
 
-    const whereClause: any = {};
+    const whereClause: any = {
+      isArchived: { not: true },
+    };
 
     if (search && typeof search === 'string' && search.trim()) {
       const q = search.trim();
@@ -885,7 +888,7 @@ export const getUserById = async (req: AuthenticatedRequest, res: Response) => {
     if (user.role === Role.EMPLOYEE) {
       const [createdClients, processedTxns] = await Promise.all([
         prisma.user.findMany({
-          where: { createdById: userId },
+          where: { createdById: userId, isArchived: { not: true } },
           select: {
             id: true,
             name: true,
@@ -1146,6 +1149,35 @@ export const deleteSingleTransaction = async (req: AuthenticatedRequest, res: Re
     return res.status(500).json({
       success: false,
       error: error.message || 'Failed to delete transaction.',
+    });
+  }
+};
+
+/**
+ * POST /api/admin/backup/delete-client/:id
+ * Super Admin soft-deletes a single client and their transactions, moving them into Backup & Restore.
+ */
+export const deleteSingleClient = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user || !req.user.isSuperAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: 'Only Super Admin can delete clients.',
+      });
+    }
+
+    const { id } = req.params;
+    const snapshot = await createSingleClientBackup(id, req.user.userId, req.user.name);
+    return res.status(200).json({
+      success: true,
+      message: 'Client and all transactions moved to Backup & Restore. Data can be restored at any time.',
+      snapshot,
+    });
+  } catch (error: any) {
+    console.error('Error in deleteSingleClient:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to delete client.',
     });
   }
 };

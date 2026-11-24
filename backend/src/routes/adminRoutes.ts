@@ -10,6 +10,7 @@ import {
   updateEmployeeLocation,
   getEmployeeLocations,
   resetApplicationData,
+  deleteSingleClient,
   deleteSingleTransaction,
   getBackupSnapshotsList,
   restoreBackupSnapshotController,
@@ -117,6 +118,9 @@ router.get('/employees/locations', getEmployeeLocations);
 // Backup, App Reset, Soft-Delete & Restore Routes
 // POST /api/admin/backup/reset-app (Super Admin one-click zero state reset)
 router.post('/backup/reset-app', requireSuperAdmin, resetApplicationData);
+
+// POST /api/admin/backup/delete-client/:id (Super Admin soft-delete single client & their transactions)
+router.post('/backup/delete-client/:id', requireSuperAdmin, deleteSingleClient);
 
 // POST /api/admin/backup/delete-transaction/:id (Super Admin soft-delete single transaction)
 router.post('/backup/delete-transaction/:id', requireSuperAdmin, deleteSingleTransaction);

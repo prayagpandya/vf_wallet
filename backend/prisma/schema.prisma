@@ -63,6 +63,11 @@ model User {
   bankName                  String?
   bankAccountHolderName     String?
   avatarUrl                 String?
+  // Soft delete & archive/backup tracking (hidden from live app, restorable via backup)
+  isArchived                Boolean       @default(false)
+  archivedAt                DateTime?
+  archivedById              String?
+  backupBatchId             String?
   createdAt                 DateTime      @default(now())
   updatedAt                 DateTime      @updatedAt
 

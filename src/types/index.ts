@@ -251,15 +251,18 @@ export interface EmployeeActivityData {
 export interface BackupSnapshot {
   id: string;
   title: string;
-  backupType: 'FULL_RESET' | 'SINGLE_TRANSACTION';
+  backupType: 'FULL_RESET' | 'SINGLE_TRANSACTION' | 'SINGLE_CLIENT';
   createdById: string;
   createdByName: string;
   createdAt: string;
+  clientCount?: number;
   transactionCount: number;
   totalDepositPaise: number;
   totalWithdrawPaise: number;
+  clientIds?: string[];
   transactionIds: string[];
   singleTransactionId?: string;
+  singleClientId?: string;
   isRestored: boolean;
   restoredAt?: string | null;
   restoredById?: string | null;
@@ -268,5 +271,21 @@ export interface BackupSnapshot {
   canUndo?: boolean;
   undoSecondsRemaining?: number;
   isPermanentlyDeleted: boolean;
+  clients?: Array<{
+    id: string;
+    name: string;
+    phone: string;
+    email?: string | null;
+    role?: string;
+    totalBalancePaise?: number;
+    activeBonusPaise?: number;
+    bonusPercentage?: number;
+    upiId?: string | null;
+    bankAccountNumber?: string | null;
+    bankIfsc?: string | null;
+    bankName?: string | null;
+    bankAccountHolderName?: string | null;
+    createdAt?: string;
+  }>;
   transactions?: any[];
 }

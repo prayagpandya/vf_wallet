@@ -28,10 +28,11 @@ const getDevHost = (): string => {
 };
 
 export const LOCAL_API_URL = `http://${getDevHost()}/api`;
-export const PRODUCTION_API_URL = LOCAL_API_URL;
+export const RENDER_API_URL = 'https://vf-wallet-backend.onrender.com/api';
+export const PRODUCTION_API_URL = RENDER_API_URL;
 
-// Default to local backend
-export const DEFAULT_API_BASE_URL = LOCAL_API_URL;
+// Default to Render backend
+export const DEFAULT_API_BASE_URL = RENDER_API_URL;
 
 let activeBaseUrl = DEFAULT_API_BASE_URL;
 
@@ -135,8 +136,8 @@ async function request<T = any>(
       ...data,
     };
   } catch (error: any) {
-    // If local network error, attempt alternative local endpoints (e.g. adb reverse localhost, Wi-Fi LAN IP, or emulator)
-    if (!endpoint.startsWith('http')) {
+    // If local network error, attempt alternative local endpoints (only when using local dev endpoints)
+    if (!endpoint.startsWith('http') && (activeBaseUrl.includes('localhost') || activeBaseUrl.includes('10.') || activeBaseUrl.includes('192.168.'))) {
       const candidates = [
         `http://${LOCAL_DEV_IP}:5000/api`,
         'http://localhost:5000/api',
@@ -480,6 +481,10 @@ export const adminApi = {
   // Backup, Reset & Restore API endpoints
   async resetApplicationData() {
     return apiClient.post('/admin/backup/reset-app');
+  },
+
+  async deleteClient(clientId: string) {
+    return apiClient.post(`/admin/backup/delete-client/${clientId}`);
   },
 
   async deleteTransaction(transactionId: string) {

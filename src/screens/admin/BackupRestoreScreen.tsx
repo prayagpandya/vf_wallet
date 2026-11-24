@@ -32,7 +32,7 @@ export const BackupRestoreScreen = () => {
   const [snapshots, setSnapshots] = useState<BackupSnapshot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'FULL_RESET' | 'SINGLE_TRANSACTION'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'FULL_RESET' | 'SINGLE_CLIENT' | 'SINGLE_TRANSACTION'>('all');
 
   // Action states
   const [isResettingApp, setIsResettingApp] = useState(false);
@@ -41,6 +41,7 @@ export const BackupRestoreScreen = () => {
   // Modals
   const [resetModalVisible, setResetModalVisible] = useState(false);
   const [selectedSnapshotForView, setSelectedSnapshotForView] = useState<BackupSnapshot | null>(null);
+  const [modalTab, setModalTab] = useState<'clients' | 'transactions'>('clients');
 
   // Live timer tick for 5-minute undo countdown
   const [, setTimerTick] = useState(0);
@@ -81,7 +82,7 @@ export const BackupRestoreScreen = () => {
       if (res.success) {
         Alert.alert(
           'Application Reset to Zero State 📦',
-          'All live transactions and client points balances have been archived into a backup file. The live app is now in a clean zero state. You can restore this data at any time from Backup & Restore.'
+          'All clients, transactions, and points balances have been archived into a backup file. The live app is now in a clean zero state (0 clients, 0 transactions). You can restore this data at any time from Backup & Restore.'
         );
         await Promise.all([loadSnapshots(true), refreshData()]);
       } else {
@@ -102,7 +103,7 @@ export const BackupRestoreScreen = () => {
       if (res.success) {
         Alert.alert(
           'Data Restored ✅',
-          `"${snapshot.title}" has been restored to the live application. Live data has been preserved.\n\n⏱️ You have 5 minutes to Undo this restore if needed.`
+          `"${snapshot.title}" has been restored to the live application. Live data has been preserved without overwriting new data.\n\n⏱️ You have 5 minutes to Undo this restore if needed.`
         );
         await Promise.all([loadSnapshots(true), refreshData()]);
       } else {
@@ -140,7 +141,7 @@ export const BackupRestoreScreen = () => {
   const handlePermanentDelete = (snapshot: BackupSnapshot) => {
     Alert.alert(
       'Permanent Hard Delete ⚠️',
-      `Are you sure you want to PERMANENTLY delete "${snapshot.title}"?\n\nThis will remove all transaction records from MongoDB and delete all associated screenshot images from storage.\n\nThis action CANNOT be undone.`,
+      `Are you sure you want to PERMANENTLY delete "${snapshot.title}"?\n\nThis will permanently delete all client records and transaction records from MongoDB and delete all associated screenshot images from storage.\n\nThis action CANNOT be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -151,7 +152,10 @@ export const BackupRestoreScreen = () => {
             try {
               const res = await adminApi.deleteBackupPermanently(snapshot.id);
               if (res.success) {
-                Alert.alert('Permanently Deleted 🗑️', res.message || 'Data deleted from database and storage.');
+                Alert.alert(
+                  'Permanently Deleted 🗑️',
+                  res.message || 'Records and screenshot images have been permanently deleted from database.'
+                );
                 await loadSnapshots(true);
               } else {
                 Alert.alert('Delete Failed', res.error || 'Could not permanently delete.');
@@ -174,6 +178,8 @@ export const BackupRestoreScreen = () => {
 
   const renderSnapshotItem = ({ item }: { item: BackupSnapshot }) => {
     const isFullReset = item.backupType === 'FULL_RESET';
+    const isSingleClient = item.backupType === 'SINGLE_CLIENT';
+    const isSingleTxn = item.backupType === 'SINGLE_TRANSACTION';
     const now = Date.now();
     let canUndo = false;
     let secondsLeft = 0;
@@ -191,6 +197,7 @@ export const BackupRestoreScreen = () => {
     const timeFormatted = `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
 
     const isProcessing = actionInProgressId === item.id;
+    const clientCount = item.clientCount ?? (item.clientIds ? item.clientIds.length : (item.clients ? item.clients.length : 0));
 
     return (
       <View style={styles.snapshotCard}>
@@ -199,21 +206,33 @@ export const BackupRestoreScreen = () => {
           <View
             style={[
               styles.typeBadge,
-              isFullReset ? styles.fullResetBadge : styles.singleTxnBadge,
+              isFullReset
+                ? styles.fullResetBadge
+                : isSingleClient
+                ? styles.singleClientBadge
+                : styles.singleTxnBadge,
             ]}
           >
             <Ionicons
-              name={isFullReset ? 'archive' : 'document-text'}
+              name={isFullReset ? 'archive' : isSingleClient ? 'person' : 'document-text'}
               size={12}
-              color={isFullReset ? '#92400E' : '#1E40AF'}
+              color={isFullReset ? '#92400E' : isSingleClient ? '#6B21A8' : '#1E40AF'}
             />
             <Text
               style={[
                 styles.typeBadgeText,
-                isFullReset ? { color: '#92400E' } : { color: '#1E40AF' },
+                isFullReset
+                  ? { color: '#92400E' }
+                  : isSingleClient
+                  ? { color: '#6B21A8' }
+                  : { color: '#1E40AF' },
               ]}
             >
-              {isFullReset ? 'FULL APP RESET' : 'DELETED TRANSACTION'}
+              {isFullReset
+                ? 'FULL APP RESET'
+                : isSingleClient
+                ? 'DELETED CLIENT'
+                : 'DELETED TRANSACTION'}
             </Text>
           </View>
 
@@ -254,16 +273,36 @@ export const BackupRestoreScreen = () => {
 
         {/* Metrics Grid */}
         <View style={styles.metricsBox}>
+          {isFullReset && (
+            <View style={styles.metricItem}>
+              <Text style={styles.metricSub}>Clients</Text>
+              <Text style={[styles.metricVal, { color: '#6B21A8' }]}>
+                {clientCount} Clients
+              </Text>
+            </View>
+          )}
+
+          {isSingleClient && (
+            <View style={styles.metricItem}>
+              <Text style={styles.metricSub}>Client</Text>
+              <Text style={[styles.metricVal, { color: '#6B21A8' }]}>
+                1 Client
+              </Text>
+            </View>
+          )}
+
           <View style={styles.metricItem}>
-            <Text style={styles.metricSub}>Records</Text>
+            <Text style={styles.metricSub}>Transactions</Text>
             <Text style={styles.metricVal}>{item.transactionCount} Txns</Text>
           </View>
+
           <View style={styles.metricItem}>
             <Text style={styles.metricSub}>Deposits</Text>
             <Text style={[styles.metricVal, { color: colors.success }]}>
               {formatPaiseToINR(item.totalDepositPaise)}
             </Text>
           </View>
+
           <View style={styles.metricItem}>
             <Text style={styles.metricSub}>Withdrawals</Text>
             <Text style={[styles.metricVal, { color: '#B45309' }]}>
@@ -288,7 +327,10 @@ export const BackupRestoreScreen = () => {
           {/* View Details */}
           <TouchableOpacity
             style={styles.viewDetailsBtn}
-            onPress={() => setSelectedSnapshotForView(item)}
+            onPress={() => {
+              setSelectedSnapshotForView(item);
+              setModalTab(item.clients && item.clients.length > 0 ? 'clients' : 'transactions');
+            }}
           >
             <Ionicons name="eye-outline" size={15} color={colors.primary} />
             <Text style={styles.viewDetailsText}>View Items</Text>
@@ -370,8 +412,8 @@ export const BackupRestoreScreen = () => {
               <View style={{ flex: 1 }}>
                 <Text style={styles.resetTitle}>Reset Application to Zero State</Text>
                 <Text style={styles.resetSub}>
-                  One-click action archives all live transactions and resets application balances to zero.
-                  Data is safely kept in MongoDB and can be restored anytime from the backup list below.
+                  One-click action archives all live clients, transactions, and points to zero state.
+                  Deleted data disappears completely from the live app, but is safely kept in MongoDB and can be restored anytime from the backup list below.
                 </Text>
               </View>
             </View>
@@ -418,6 +460,15 @@ export const BackupRestoreScreen = () => {
             </TouchableOpacity>
 
             <TouchableOpacity
+              style={[styles.filterChip, activeFilter === 'SINGLE_CLIENT' && styles.filterChipActive]}
+              onPress={() => setActiveFilter('SINGLE_CLIENT')}
+            >
+              <Text style={[styles.filterChipText, activeFilter === 'SINGLE_CLIENT' && styles.filterChipTextActive]}>
+                Deleted Clients ({snapshots.filter((s) => s.backupType === 'SINGLE_CLIENT').length})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={[styles.filterChip, activeFilter === 'SINGLE_TRANSACTION' && styles.filterChipActive]}
               onPress={() => setActiveFilter('SINGLE_TRANSACTION')}
             >
@@ -439,7 +490,7 @@ export const BackupRestoreScreen = () => {
             <Ionicons name="file-tray-outline" size={48} color={colors.textLight} />
             <Text style={styles.emptyTitle}>No Backup Snapshots Found</Text>
             <Text style={styles.emptySub}>
-              When you reset the application or delete transactions, restorable backup archives will be stored here.
+              When you reset the application or delete clients/transactions, restorable backup archives will be stored here.
             </Text>
           </View>
         ) : (
@@ -465,7 +516,7 @@ export const BackupRestoreScreen = () => {
             </View>
             <Text style={styles.modalTitle}>Confirm Application Reset</Text>
             <Text style={styles.modalDesc}>
-              This will archive all current transactions and reset client points balances to zero state.
+              This will archive all current clients, transactions, and points balances to zero state.
               {'\n\n'}
               <Text style={{ fontWeight: '700', color: colors.success }}>
                 ✅ Your data will NOT be deleted from the database.
@@ -498,9 +549,13 @@ export const BackupRestoreScreen = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxHeight: '85%' }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <Text style={[styles.modalTitle, { marginBottom: 0 }]}>
-                {selectedSnapshotForView?.backupType === 'FULL_RESET' ? 'Backup Archive Items' : 'Deleted Transaction'}
+                {selectedSnapshotForView?.backupType === 'FULL_RESET'
+                  ? 'App Reset Archive Items'
+                  : selectedSnapshotForView?.backupType === 'SINGLE_CLIENT'
+                  ? 'Deleted Client Archive'
+                  : 'Deleted Transaction'}
               </Text>
               <TouchableOpacity onPress={() => setSelectedSnapshotForView(null)}>
                 <Ionicons name="close-circle" size={26} color={colors.textLight} />
@@ -508,11 +563,65 @@ export const BackupRestoreScreen = () => {
             </View>
 
             <Text style={{ fontSize: 13, color: colors.textSecondary, marginBottom: 12 }}>
-              {selectedSnapshotForView?.title} ({selectedSnapshotForView?.transactionCount} items)
+              {selectedSnapshotForView?.title}
             </Text>
 
-            <ScrollView style={{ maxHeight: 380 }}>
-              {selectedSnapshotForView?.transactions && selectedSnapshotForView.transactions.length > 0 ? (
+            {/* Toggle Tabs if both clients and transactions are present */}
+            {selectedSnapshotForView?.clients && selectedSnapshotForView.clients.length > 0 && selectedSnapshotForView?.transactions && (
+              <View style={styles.modalTabsRow}>
+                <TouchableOpacity
+                  style={[styles.modalTabBtn, modalTab === 'clients' && styles.modalTabBtnActive]}
+                  onPress={() => setModalTab('clients')}
+                >
+                  <Ionicons
+                    name="people-outline"
+                    size={14}
+                    color={modalTab === 'clients' ? colors.primary : colors.textSecondary}
+                  />
+                  <Text style={[styles.modalTabText, modalTab === 'clients' && styles.modalTabTextActive]}>
+                    Clients ({selectedSnapshotForView.clients.length})
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalTabBtn, modalTab === 'transactions' && styles.modalTabBtnActive]}
+                  onPress={() => setModalTab('transactions')}
+                >
+                  <Ionicons
+                    name="receipt-outline"
+                    size={14}
+                    color={modalTab === 'transactions' ? colors.primary : colors.textSecondary}
+                  />
+                  <Text style={[styles.modalTabText, modalTab === 'transactions' && styles.modalTabTextActive]}>
+                    Transactions ({selectedSnapshotForView.transactions.length})
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <ScrollView style={{ maxHeight: 360 }}>
+              {modalTab === 'clients' && selectedSnapshotForView?.clients && selectedSnapshotForView.clients.length > 0 ? (
+                selectedSnapshotForView.clients.map((c: any, idx: number) => (
+                  <View key={c.id || idx} style={styles.miniClientItem}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>
+                        {c.name}
+                      </Text>
+                      <Text style={{ fontSize: 13, fontWeight: '800', color: colors.primary }}>
+                        {formatPaiseToINR(c.totalBalancePaise || 0)} Points
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                        📞 {c.phone} {c.bonusPercentage ? `• ${c.bonusPercentage}% Bonus` : ''}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                        {c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-IN') : '—'}
+                      </Text>
+                    </View>
+                  </View>
+                ))
+              ) : selectedSnapshotForView?.transactions && selectedSnapshotForView.transactions.length > 0 ? (
                 selectedSnapshotForView.transactions.map((t: any, idx: number) => (
                   <View key={t.id || idx} style={styles.miniTxnItem}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -544,7 +653,7 @@ export const BackupRestoreScreen = () => {
                 ))
               ) : (
                 <Text style={{ fontSize: 12, color: colors.textMuted, fontStyle: 'italic', textAlign: 'center', marginVertical: 20 }}>
-                  No item details embedded in this snapshot header.
+                  No item details embedded in this snapshot.
                 </Text>
               )}
             </ScrollView>
@@ -678,6 +787,9 @@ const styles = StyleSheet.create({
   fullResetBadge: {
     backgroundColor: '#FEF3C7',
   },
+  singleClientBadge: {
+    backgroundColor: '#F3E8FF',
+  },
   singleTxnBadge: {
     backgroundColor: '#DBEAFE',
   },
@@ -750,9 +862,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   undoNoticeText: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#92400E',
-    flex: 1,
   },
   actionButtonsRow: {
     flexDirection: 'row',
@@ -763,12 +874,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: '#F0F9FF',
+    backgroundColor: colors.surfaceAlt,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: colors.cardBorder,
   },
   viewDetailsText: {
     fontSize: 12,
@@ -780,11 +891,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    backgroundColor: colors.success,
+    gap: 5,
+    backgroundColor: colors.primary,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 10,
+    borderRadius: 8,
   },
   restoreBtnText: {
     fontSize: 12,
@@ -796,17 +907,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: '#FEF3C7',
     borderWidth: 1,
     borderColor: '#FDE68A',
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 10,
+    borderRadius: 8,
   },
   undoBtnText: {
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#92400E',
   },
   restoredDoneChip: {
@@ -814,11 +925,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 5,
     backgroundColor: '#DCFCE7',
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 10,
+    borderRadius: 8,
   },
   restoredDoneText: {
     fontSize: 12,
@@ -826,47 +937,40 @@ const styles = StyleSheet.create({
     color: '#15803D',
   },
   deletePermBtn: {
-    padding: 8,
-    borderRadius: 10,
     backgroundColor: '#FEE2E2',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#FECACA',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   loadingBox: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 40,
+    gap: 8,
   },
   loadingText: {
-    marginTop: 10,
     fontSize: 13,
     color: colors.textSecondary,
   },
   emptyBox: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.white,
-    padding: 30,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    marginTop: 10,
+    paddingVertical: 40,
+    gap: 8,
   },
   emptyTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: colors.text,
-    marginTop: 12,
-    marginBottom: 4,
   },
   emptySub: {
-    fontSize: 12,
-    color: colors.textMuted,
+    fontSize: 13,
+    color: colors.textSecondary,
     textAlign: 'center',
+    paddingHorizontal: 20,
     lineHeight: 18,
-    paddingHorizontal: 16,
   },
   modalOverlay: {
     flex: 1,
@@ -876,14 +980,15 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    width: '100%',
     backgroundColor: colors.white,
     borderRadius: 20,
     padding: 20,
-    shadowColor: '#000',
+    width: '100%',
+    maxWidth: 420,
+    shadowColor: colors.shadowColor,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
-    shadowRadius: 10,
+    shadowRadius: 12,
     elevation: 8,
   },
   modalAlertIcon: {
@@ -891,30 +996,72 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   modalTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
     color: colors.text,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   modalDesc: {
     fontSize: 13,
     color: colors.textSecondary,
-    textAlign: 'center',
     lineHeight: 19,
+    textAlign: 'center',
     marginBottom: 20,
   },
   modalButtonRow: {
     flexDirection: 'row',
     gap: 12,
   },
+  modalTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    padding: 4,
+  },
+  modalTabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  modalTabBtnActive: {
+    backgroundColor: colors.white,
+    shadowColor: colors.shadowColor,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  modalTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  modalTabTextActive: {
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  miniClientItem: {
+    backgroundColor: '#FAF5FF',
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+  },
   miniTxnItem: {
     backgroundColor: '#F8FAFC',
-    borderRadius: 10,
     padding: 10,
+    borderRadius: 10,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    marginBottom: 8,
   },
 });
 

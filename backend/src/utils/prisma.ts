@@ -1,3 +1,23 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
+// Clean any surrounding quotes or accidental whitespace (e.g. from Render dashboard input)
+if (process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = process.env.DATABASE_URL.trim().replace(/^["']|["']$/g, '').trim();
+}
+if (process.env.MONGODB_URI) {
+  process.env.MONGODB_URI = process.env.MONGODB_URI.trim().replace(/^["']|["']$/g, '').trim();
+}
+
+const mongoFallback =
+  (process.env.MONGODB_URI && process.env.MONGODB_URI.startsWith('mongodb') ? process.env.MONGODB_URI : null) ||
+  'mongodb+srv://mkdigitalnexus_db_user:vFxCATzlPDGMdPR1@cluster0.9d3mp7l.mongodb.net/vf_wallet?retryWrites=true&w=majority';
+
+// If DATABASE_URL is missing or still set to legacy postgresql, ensure it uses MongoDB
+if (!process.env.DATABASE_URL || !process.env.DATABASE_URL.startsWith('mongodb')) {
+  process.env.DATABASE_URL = mongoFallback;
+}
+
 import { PrismaClient } from '@prisma/client';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
@@ -5,6 +25,11 @@ const globalForPrisma = global as unknown as { prisma: PrismaClient };
 export const prisma =
   globalForPrisma.prisma ||
   new PrismaClient({
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL,
+      },
+    },
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   });
 

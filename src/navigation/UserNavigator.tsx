@@ -2,8 +2,10 @@ import React from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../theme/colors';
+import { getAdaptiveTabBarStyle } from '../utils/navigationBar';
 
 import { UserDashboard } from '../screens/user/UserDashboard';
 import { DepositScreen } from '../screens/user/DepositScreen';
@@ -31,25 +33,16 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator<UserStackParamList>();
 
 const UserTabNavigator = () => {
+  const insets = useSafeAreaInsets();
+  const { tabBarStyle } = getAdaptiveTabBarStyle(insets);
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: {
-          backgroundColor: colors.white,
-          borderTopColor: colors.cardBorder,
-          borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 86 : 64,
-          paddingBottom: Platform.OS === 'ios' ? 24 : 10,
-          paddingTop: 8,
-          shadowColor: colors.shadowColor,
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.05,
-          shadowRadius: 8,
-          elevation: 8,
-        },
+        tabBarStyle,
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',

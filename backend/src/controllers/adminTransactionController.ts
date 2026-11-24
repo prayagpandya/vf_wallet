@@ -87,6 +87,12 @@ export const createClientDeposit = async (
       client = await prisma.user.findUnique({
         where: { id: clientId },
       });
+      if (client?.isArchived) {
+        return res.status(400).json({
+          success: false,
+          error: 'This client is archived in Backup & Restore. Please restore the client before depositing.',
+        });
+      }
     }
 
     // On-the-fly client creation by name & phone if client not found or clientId === 'new'
@@ -111,7 +117,15 @@ export const createClientDeposit = async (
       });
 
       if (existingClient) {
-        client = existingClient;
+        if (existingClient.isArchived) {
+          // Reactivate client from archived state
+          client = await prisma.user.update({
+            where: { id: existingClient.id },
+            data: { isArchived: false, backupBatchId: null },
+          });
+        } else {
+          client = existingClient;
+        }
       } else {
         // Fetch running daily rates for new client default setup
         const dailySettings = await getRunningDailyBonusRate();
@@ -406,10 +420,10 @@ export const createClientWithdrawal = async (
       where: { id: clientId },
     });
 
-    if (!client || !isClientRole(client.role)) {
+    if (!client || !isClientRole(client.role) || client.isArchived) {
       return res.status(404).json({
         success: false,
-        error: 'Target client account not found.',
+        error: 'Target client account not found or is currently archived in Backup & Restore.',
       });
     }
 
@@ -673,8 +687,18 @@ export const getAdminStats = async (
 ) => {
   try {
     const [totalClients, totalEmployees, transactions, clientsBalanceAgg] = await Promise.all([
-      prisma.user.count({ where: { role: { in: [Role.CLIENT, Role.USER] } } }),
-      prisma.user.count({ where: { role: Role.EMPLOYEE } }),
+      prisma.user.count({
+        where: {
+          role: { in: [Role.CLIENT, Role.USER] },
+          isArchived: { not: true },
+        },
+      }),
+      prisma.user.count({
+        where: {
+          role: Role.EMPLOYEE,
+          isArchived: { not: true },
+        },
+      }),
       prisma.transaction.findMany({
         where: {
           status: TransactionStatus.APPROVED,
@@ -688,7 +712,10 @@ export const getAdminStats = async (
         },
       }),
       prisma.user.aggregate({
-        where: { role: { in: [Role.CLIENT, Role.USER] } },
+        where: {
+          role: { in: [Role.CLIENT, Role.USER] },
+          isArchived: { not: true },
+        },
         _sum: { totalBalancePaise: true, activeBonusPaise: true },
       }),
     ]);

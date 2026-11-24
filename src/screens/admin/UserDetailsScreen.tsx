@@ -125,6 +125,8 @@ export const UserDetailsScreen = () => {
   // Modals
   const [blockModalVisible, setBlockModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [deleteClientModalVisible, setDeleteClientModalVisible] = useState(false);
+  const [isDeletingClient, setIsDeletingClient] = useState(false);
 
   // Employee Action Tracking State
   const [employeeDateFilter, setEmployeeDateFilter] = useState<
@@ -492,6 +494,36 @@ export const UserDetailsScreen = () => {
       );
     } else {
       Alert.alert('Error', res.error || 'Failed to update status.');
+    }
+  };
+
+  const handleConfirmDeleteClient = async () => {
+    if (!account) return;
+    setDeleteClientModalVisible(false);
+    setIsDeletingClient(true);
+    try {
+      const res = await adminApi.deleteClient(account.id);
+      if (res.success) {
+        Alert.alert(
+          'Client Moved to Backup 📦',
+          `"${account.name}" and all their transaction records have been deleted from the live application and securely archived in Backup & Restore.\n\nYou can restore this client at any time from Backup & Restore, or permanently delete them from the database.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                refreshData();
+                navigation.goBack();
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Delete Failed', res.error || 'Could not delete client.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to delete client.');
+    } finally {
+      setIsDeletingClient(false);
     }
   };
 
@@ -1439,6 +1471,35 @@ export const UserDetailsScreen = () => {
           </View>
         )}
 
+        {/* Super Admin Delete Client to Backup */}
+        {isSuperAdmin && !isEmployee && (
+          <View style={[styles.card, styles.dangerCard]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <Ionicons name="warning-outline" size={16} color={colors.danger} />
+              <Text style={styles.dangerZoneTitle}>Delete Client from Application</Text>
+            </View>
+            <Text style={styles.dangerZoneSubtitle}>
+              Removes this client and their entire transaction history from the live app. All data is safely stored in Backup & Restore, where it can be restored anytime or permanently deleted from the database.
+            </Text>
+            <TouchableOpacity
+              style={styles.deleteClientBtn}
+              onPress={() => setDeleteClientModalVisible(true)}
+              disabled={isDeletingClient}
+            >
+              {isDeletingClient ? (
+                <ActivityIndicator size="small" color={colors.danger} />
+              ) : (
+                <>
+                  <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                  <Text style={styles.deleteClientBtnText}>
+                    Delete Client (Move to Backup)
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Client Transactions History */}
         {!isEmployee && (
           <View style={{ marginTop: 4 }}>
@@ -1488,6 +1549,17 @@ export const UserDetailsScreen = () => {
         variant={account.status === 'blocked' ? 'primary' : 'danger'}
         onConfirm={handleConfirmToggleBlock}
         onCancel={() => setBlockModalVisible(false)}
+      />
+
+      {/* Delete Client to Backup Confirmation Modal */}
+      <ConfirmationModal
+        visible={deleteClientModalVisible}
+        title="Delete Client from App?"
+        message={`Are you sure you want to delete "${account.name}" (${account.phone}) from the application?\n\nThis will remove the client and their ${effectiveTxns.length} transaction(s) from all live screens. The data will be safely stored in Backup & Restore and can be restored anytime.`}
+        confirmLabel="Delete & Move to Backup"
+        variant="danger"
+        onConfirm={handleConfirmDeleteClient}
+        onCancel={() => setDeleteClientModalVisible(false)}
       />
 
       {/* Employee Custom Date Range Modal */}
@@ -2333,6 +2405,38 @@ const styles = StyleSheet.create({
   modalActionsRow: {
     flexDirection: 'row',
     gap: 10,
+  },
+  dangerCard: {
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    borderWidth: 1,
+    backgroundColor: 'rgba(239, 68, 68, 0.02)',
+  },
+  dangerZoneTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.danger,
+  },
+  dangerZoneSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 17,
+    marginBottom: 12,
+  },
+  deleteClientBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  deleteClientBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.danger,
   },
 });
 
