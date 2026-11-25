@@ -26,7 +26,7 @@ async function callOcrSpaceFromServer(
   filetype: string,
   engine: '2' | '1'
 ): Promise<{ text: string; error?: string }> {
-  const keys = ['K87899148788957', 'helloworld'];
+  const keys = ['K87899148788957', 'K88328135888957', 'K89457812888957', 'helloworld'];
   let lastError = '';
 
   for (const apiKey of keys) {

@@ -262,6 +262,7 @@ export const createUser = async (req: AuthenticatedRequest, res: Response) => {
           createdById: creatorId,
           createdByName: creatorName,
           createdByRole: creatorRole,
+          isArchived: false,
         },
       })
     );

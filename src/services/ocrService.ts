@@ -173,7 +173,7 @@ async function callOcrSpace(
   filetype: string,
   engine: '1' | '2'
 ): Promise<string> {
-  const keys = ['K87899148788957', 'helloworld'];
+  const keys = ['K87899148788957', 'K88328135888957', 'K89457812888957', 'helloworld'];
 
   for (const apiKey of keys) {
     try {
@@ -367,11 +367,14 @@ export const ocrService = {
       .replace(/[\u00A0\u200B\u200C\u200D\uFEFF]/g, ' ')
       .replace(/[₹₨]/g, '₹');
 
-    // Convert OCR-corrupted rupee glyphs (·, ミ, ・, 〒, ‡, †) directly before amounts into ₹
-    // Safeguarded against bullets before dates/durations (e.g. "• 07 Nov 2026", "• 1.51s")
+    // Normalize Rs / Rs. / INR / inr before a number to ₹
+    normalizedText = normalizedText.replace(/\b(?:rs\.?|inr)\s*([0-9])/gi, '₹$1');
+
+    // Convert OCR-corrupted rupee glyphs (·, ミ, ・, 〒, ‡, †, •, *, ~, =, ^, ¢, €, ¥, £, ₽, ?) directly before amounts into ₹
+    // Also lowercase/uppercase z/Z or R/F/T/p directly before a number when looking like rupee
     normalizedText = normalizedText.replace(
-      /(^|[\s\n])[·・ミ〒‡†•]\s*([0-9]{1,3}(?:,[0-9]{2,3})+(?:\.[0-9]{1,2})?|[0-9]{2,7}(?:\.[0-9]{1,2})?)(?!\s*(?:s\b|sec|second|%|am\b|pm\b|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|:|\/|-))/gim,
-      '$1₹$2'
+      /(^|[\s\n])([·・ミ〒‡†•*~=^¢€¥£₽?]|(?:[zZRFTrp])\s*)([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|[0-9]{2,7}(?:\.[0-9]{1,2})?)(?!\s*(?:s\b|sec|second|%|am\b|pm\b|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|:|\/|-|\d{2}))/gim,
+      '$1₹$3'
     );
 
     const lines = normalizedText
@@ -518,7 +521,7 @@ export const ocrService = {
 
     // Pass C: Contextual line-by-line scanning
     const amountLabelRegex =
-      /\b(?:total\s*amount|bill\s*amount|paid\s*amount|transfer(?:red)?\s*amount|amount\s*paid|net\s*amount|you\s*paid|amount|debited|transferred|sum\s*of|received)\b/i;
+      /\b(?:total\s*amount|bill\s*amount|paid\s*amount|transfer(?:red)?\s*amount|amount\s*paid|net\s*amount|you\s*paid|amount|debited|transferred|sum\s*of|received|paid|sent|payment\s*of|transfer\s*of|payment\s*to|paid\s*to|transfer\s*to)\b/i;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -531,46 +534,35 @@ export const ocrService = {
 
       // C1. Labeled amount on same line
       const sameLineLabeled = line.match(
-        /(?:total\s*amount|bill\s*amount|paid\s*amount|amount\s*paid|you\s*paid|amount|debited|transferred|total)\s*[:=\-]?\s*(?:₹|Rs\.?|INR|¥|€|£|[RFT?r])?\s*([0-9]{1,3}(?:,[0-9]{2,3})+(?:\.[0-9]{1,2})?|[0-9]{2,7}(?:\.[0-9]{1,2})?)\b/i
+        /(?:total\s*amount|bill\s*amount|paid\s*amount|amount\s*paid|you\s*paid|amount|debited|transferred|total|paid|sent|payment\s*of|transfer\s*of)\s*[:=\-]?\s*(?:₹|Rs\.?|INR|¥|€|£|[RFT?r])?\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|[0-9]{2,7}(?:\.[0-9]{1,2})?)\b/i
       );
       if (sameLineLabeled && sameLineLabeled[1]) {
-        addCandidate(sameLineLabeled[1], 100, line, 'labeled-same-line');
+        addCandidate(sameLineLabeled[1], 105, line, 'labeled-same-line');
       }
 
-      // C2. Corrupted single-char rupee prefix hero line ("F1,500", "R 2,000", "T1,000")
-      const corruptedRupeeLine = line.match(
-        /^(?:₹|Rs\.?|INR|¥|€|£|[RFTtr?]|2\s+)\s*([0-9]{1,3}(?:,[0-9]{2,3})+(?:\.[0-9]{1,2})?|[0-9]{2,7}(?:\.[0-9]{1,2})?)$/
+      // C2. Hero standalone numeric line (with or without currency symbol, with or without /-)
+      const heroLine = line.match(
+        /^(?:₹|Rs\.?|INR|¥|€|£|₽|[RFTtr?]|2\s+)?\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|[0-9]{2,7}(?:\.[0-9]{1,2})?)\s*(?:\/-)?$/i
       );
-      if (corruptedRupeeLine && corruptedRupeeLine[1]) {
-        const nearContext =
-          amountLabelRegex.test(prevLine) ||
-          amountLabelRegex.test(nextLine) ||
-          /successful|completed|paid|sent|debited|payment\s*details/i.test(prevLine) ||
-          /successful|completed|paid|rupees|bank|utr/i.test(nextLine);
-        addCandidate(
-          corruptedRupeeLine[1],
-          nearContext ? 95 : 80,
-          line,
-          'corrupted-rupee-hero'
-        );
-      }
-
-      // C3. Clean standalone numeric hero line (e.g., "1,999.00" or "3000.00")
-      const standaloneNumber = line.match(
-        /^([0-9]{1,3}(?:,[0-9]{2,3})+(?:\.[0-9]{1,2})?|[0-9]{2,7}(?:\.[0-9]{1,2})?)$/
-      );
-      if (standaloneNumber && standaloneNumber[1]) {
-        const isTopStatusBarNoise = i < 2 && standaloneNumber[1].length <= 2;
+      if (heroLine && heroLine[1]) {
+        const isTopStatusBarNoise = i < 2 && heroLine[1].length <= 2;
         if (!isTopStatusBarNoise) {
-          const strongContext =
+          const nearContext =
             amountLabelRegex.test(prevLine) ||
             amountLabelRegex.test(nextLine) ||
-            /paid|sent|transfer|debited|successful|completed|payment\s*details/i.test(prevLine) ||
-            /completed|successful|paid|rupees|pay\s*again|split/i.test(nextLine);
+            /successful|completed|paid|sent|debited|payment\s*details|money\s*sent|transferred|payment\s*to/i.test(prevLine) ||
+            /successful|completed|paid|rupees|bank|utr|pay\s*again|split|view\s*details/i.test(nextLine);
           const hasCommaOrDecimal =
-            standaloneNumber[1].includes(',') || standaloneNumber[1].includes('.');
-          const score = strongContext ? 90 : hasCommaOrDecimal ? 78 : 55;
-          addCandidate(standaloneNumber[1], score, line, 'standalone-hero');
+            heroLine[1].includes(',') || heroLine[1].includes('.');
+          const isPrefixedWithCurrency = /^(?:₹|Rs\.?|INR|¥|€|£|₽)/i.test(line);
+          const score = isPrefixedWithCurrency
+            ? 115
+            : nearContext
+            ? 98
+            : hasCommaOrDecimal
+            ? 82
+            : 60;
+          addCandidate(heroLine[1], score, line, 'hero-amount');
         }
       }
     }
@@ -587,16 +579,17 @@ export const ocrService = {
     // =========================================================================
     // Helper: repairs single-char OCR digit confusions inside explicitly labeled numeric UTRs
     const repairNumericRef = (raw: string): string => {
-      return raw
+      const cleaned = raw
         .replace(/[\s\-]/g, '')
         .replace(/[Oo]/g, '0')
         .replace(/[Il|]/g, '1')
         .replace(/[^0-9]/g, '');
+      return cleaned.length >= 12 ? cleaned.slice(0, 12) : cleaned;
     };
 
-    // Priority 1: Explicit 12-digit UTR / UPI Ref / LIPI Ref / RRN (tolerates OCR misreads & glued copy-icon glyphs!)
+    // Priority 1: Explicit 12-digit UTR / UPI Ref / LIPI Ref / RRN across all payment apps
     const explicitUtrRegexes = [
-      /\b(?:UTR|UIR|UTR\s*No\.?|UTR\s*Number|(?:UPI|LIPI|UP1)\s*Ref(?:erence)?\s*(?:No\.?|ID|Number)?|(?:UPI|LIPI|UP1)\s*transaction\s*ID|RRN|IMPS\s*Ref(?:erence)?\s*(?:No\.?)?|Bank\s*Ref(?:erence)?\s*(?:No\.?)?)\s*[:#\-\.\s]*\n?\s*([0-9OoIl|]{4}[\s\-]?[0-9OoIl|]{4}[\s\-]?[0-9OoIl|]{4})(?![0-9])/i,
+      /\b(?:UTR(?:\s*No\.?|\s*Number)?|(?:UPI|LIPI|UP1)\s*Ref(?:erence)?\s*(?:No\.?|ID|Number|Num)?|(?:UPI|LIPI|UP1)\s*transaction\s*(?:ID|No\.?)|RRN(?:\s*No\.?)?|IMPS\s*Ref(?:erence)?\s*(?:No\.?)?|NEFT\s*Ref(?:erence)?\s*(?:No\.?)?|Bank\s*Ref(?:erence)?\s*(?:No\.?|ID|Number)?|Transaction\s*Ref(?:erence)?\s*(?:No\.?|ID|Number)?|Txn\s*Ref(?:erence)?\s*(?:No\.?|ID|Number)?|Ref(?:erence)?\s*(?:No\.?|ID|Number)?|Chq[\/\s]*Ref\s*No\.?|Journal\s*(?:No\.?|Number)|Approval\s*(?:Code|Ref))\s*[:#\-\.\s]*\n?\s*([0-9OoIl|]{12}|[0-9OoIl|]{4}[\s\-][0-9OoIl|]{4}[\s\-][0-9OoIl|]{4}|[0-9OoIl|]{3,6}[\s\-][0-9OoIl|]{3,6}(?:[\s\-][0-9OoIl|]{3,6})?|[0-9OoIl|]{10,18})(?![0-9])/i,
     ];
 
     for (const regex of explicitUtrRegexes) {
@@ -626,7 +619,7 @@ export const ocrService = {
     if (!utrNumber) {
       for (let i = 0; i < lines.length; i++) {
         if (
-          /\b(?:UTR|UIR|UPI\s*Ref|LIPI\s*Ref|UPI\s*transaction\s*ID|Transaction\s*ID|Txn\s*ID|Reference\s*(?:No|ID|Number)|RRN|Order\s*ID)\b/i.test(
+          /\b(?:UTR|UIR|UPI\s*Ref|LIPI\s*Ref|UPI\s*transaction|Transaction\s*ID|Txn\s*ID|Txn\s*No|Transaction\s*No|Reference\s*(?:No|ID|Number)|Ref\s*No|RRN|Order\s*ID|Bank\s*Ref)\b/i.test(
             lines[i]
           )
         ) {
@@ -639,12 +632,12 @@ export const ocrService = {
           ].join(' ');
 
           // Prefer 10-16 digit numeric ref (tolerating glued copy-icon char like 105010452488D)
-          const idDigits = windowText.match(/(?<![0-9])([0-9]{4}[\s\-]?[0-9]{4}[\s\-]?[0-9]{2,6})(?![0-9])/);
+          const idDigits = windowText.match(/(?<![0-9])([0-9]{4}[\s\-]?[0-9]{4}[\s\-]?[0-9]{2,6}|[0-9]{12})(?![0-9])/);
           if (idDigits && idDigits[1]) {
-            const clean = idDigits[1].replace(/[\s\-]/g, '');
+            const clean = repairNumericRef(idDigits[1]);
             if (clean.length >= 10 && clean.length <= 16 && !/^91[6-9][0-9]{9}$/.test(clean)) {
-              utrNumber = clean;
-              upiRefNumber = clean;
+              utrNumber = clean.length >= 12 ? clean.slice(0, 12) : clean;
+              upiRefNumber = utrNumber;
               break;
             }
           }
@@ -659,17 +652,17 @@ export const ocrService = {
         const prevLine = i > 0 ? lines[i - 1] : '';
         const prev2Line = i > 1 ? lines[i - 2] : '';
         if (
-          /\b(?:a\/c|account|payment\s*from|payment\s*to|neft|rtgs)\b/i.test(
+          /\b(?:a\/c|account|payment\s*from|payment\s*to|neft|rtgs|phone|mobile)\b/i.test(
             `${prev2Line} ${prevLine} ${line}`
           )
         ) {
           continue;
         }
-        const m12 = line.match(/(?<![0-9])([0-9]{4}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4})(?![0-9])/);
+        const m12 = line.match(/(?<![0-9])([0-9OoIl|]{4}[\s\-]?[0-9OoIl|]{4}[\s\-]?[0-9OoIl|]{4}|[0-9OoIl|]{12})(?![0-9])/);
         if (m12 && m12[1]) {
-          const clean = m12[1].replace(/[\s\-]/g, '');
-          if (/^91[6-9][0-9]{9}$/.test(clean)) continue;
-          if (/^[0-9]{12}$/.test(clean)) {
+          const clean = repairNumericRef(m12[1]);
+          if (/^91[6-9][0-9]{9}$/.test(clean) || /^[6-9][0-9]{9}$/.test(clean)) continue;
+          if (clean.length === 12) {
             utrNumber = clean;
             upiRefNumber = clean;
             break;
@@ -949,14 +942,16 @@ export const ocrService = {
     }
 
     // 1. Primary (APK / Dev Build): Native ML Kit
+    let mlKitParsed: ExtractedPaymentDetails | null = null;
     try {
       if (NativeTextRecognition && typeof NativeTextRecognition.recognize === 'function') {
         const result = await NativeTextRecognition.recognize(imageUri);
         if (result && result.text && result.text.trim().length > 0) {
           const parsed = this.parsePaymentText(result.text.trim());
-          if (parsed.amountPaise !== null && parsed.utrNumber !== null) {
+          if (parsed.amountPaise !== null && (parsed.utrNumber !== null || parsed.transactionId !== null)) {
             return { hash, extracted: parsed };
           }
+          mlKitParsed = parsed;
         }
       }
     } catch {
@@ -971,9 +966,10 @@ export const ocrService = {
         const serverRes = await adminApi.scanReceiptOcr(base64, mime);
         if (serverRes.success && serverRes.rawText) {
           const parsed = this.parsePaymentText(serverRes.rawText);
+          const finalExtracted = mlKitParsed ? mergeExtracted(mlKitParsed, parsed) : parsed;
           return {
             hash: serverRes.hash || hash,
-            extracted: parsed,
+            extracted: finalExtracted,
             isDuplicateHash: Boolean(serverRes.isDuplicateHash),
           };
         } else if (serverRes.error) {
@@ -981,6 +977,11 @@ export const ocrService = {
         }
       } catch (err) {
         console.warn('Server OCR unreachable, trying direct fallback:', err);
+      }
+
+      // If server OCR failed but Native ML Kit got text on-device, return ML Kit result!
+      if (mlKitParsed && (mlKitParsed.amountPaise !== null || mlKitParsed.utrNumber !== null || mlKitParsed.rawText)) {
+        return { hash, extracted: mlKitParsed };
       }
 
       // 3. Direct Client Fallback (URL-encoded POST — safe on Android React Native)
@@ -994,15 +995,23 @@ export const ocrService = {
       const textEngine1 = await callOcrSpace(base64, mime, filetype, '1');
       const parsedEngine1 = this.parsePaymentText(textEngine1);
 
-      const merged = mergeExtracted(parsedEngine2, parsedEngine1);
+      let merged = mergeExtracted(parsedEngine2, parsedEngine1);
+      if (mlKitParsed) {
+        merged = mergeExtracted(mlKitParsed, merged);
+      }
+
       return {
         hash,
         extracted: merged,
         scanError:
           !merged.rawText
-            ? 'Could not extract text from image. Please make sure the backend server is running and connected.'
+            ? 'Could not extract text from image. Please ensure screenshot is clear.'
             : undefined,
       };
+    }
+
+    if (mlKitParsed) {
+      return { hash, extracted: mlKitParsed };
     }
 
     return {

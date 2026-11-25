@@ -13,7 +13,7 @@ export const getTodayDateString = (): string => {
 
 /**
  * Retrieves the currently active daily running bonus percentage.
- * Defaults: bonus = 0% (if inactive/unset)
+ * Defaults to 10.0% active if no custom daily rate has been explicitly set.
  */
 export const getRunningDailyBonusRate = async (): Promise<{
   percentage: number;
@@ -24,6 +24,7 @@ export const getRunningDailyBonusRate = async (): Promise<{
   const today = getTodayDateString();
 
   try {
+    // 1. Check if explicitly set for today
     const todayBonus = await prisma.dailyBonus.findUnique({
       where: { date: today },
     });
@@ -37,24 +38,52 @@ export const getRunningDailyBonusRate = async (): Promise<{
       };
     }
 
-    // Check system setting fallback
+    // 2. Check the most recent daily bonus record from previous days
+    const latestBonus = await prisma.dailyBonus.findFirst({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (latestBonus) {
+      return {
+        percentage: latestBonus.isActive ? latestBonus.percentage : 0.0,
+        isActive: latestBonus.isActive,
+        date: today,
+        isSetForToday: false,
+      };
+    }
+
+    // 3. Check system setting fallback
     const fallbackBonus = await prisma.systemSetting.findUnique({
       where: { key: 'running_daily_bonus_rate' },
     });
 
-    let fallbackPct = 0.0;
-    let fallbackBonusActive = false;
     if (fallbackBonus && fallbackBonus.value) {
       const parsed = parseFloat(fallbackBonus.value);
       if (!isNaN(parsed) && parsed >= 0) {
-        fallbackPct = parsed;
-        fallbackBonusActive = true;
+        return {
+          percentage: parsed,
+          isActive: parsed > 0,
+          date: today,
+          isSetForToday: false,
+        };
       }
     }
 
+    // 4. Default: Standard running daily bonus is 10.0% (active)
+    // Seed this into system settings so future queries find it
+    try {
+      await prisma.systemSetting.upsert({
+        where: { key: 'running_daily_bonus_rate' },
+        create: { key: 'running_daily_bonus_rate', value: '10' },
+        update: {},
+      });
+    } catch {
+      // ignore concurrency
+    }
+
     return {
-      percentage: fallbackPct,
-      isActive: fallbackBonusActive,
+      percentage: 10.0,
+      isActive: true,
       date: today,
       isSetForToday: false,
     };
@@ -63,8 +92,8 @@ export const getRunningDailyBonusRate = async (): Promise<{
   }
 
   return {
-    percentage: 0.0,
-    isActive: false,
+    percentage: 10.0,
+    isActive: true,
     date: today,
     isSetForToday: false,
   };

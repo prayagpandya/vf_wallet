@@ -57,6 +57,20 @@ export async function seedDefaultAdmin() {
       });
       console.log(`[Seed] 🛡️ Super Admin (${SUPER_ADMIN_CONFIG.phone}) verified and active.`);
     }
+
+    // Ensure default running daily bonus rate setting exists
+    const existingBonusSetting = await prisma.systemSetting.findUnique({
+      where: { key: 'running_daily_bonus_rate' },
+    });
+    if (!existingBonusSetting) {
+      await prisma.systemSetting.create({
+        data: {
+          key: 'running_daily_bonus_rate',
+          value: '10',
+        },
+      });
+      console.log('[Seed] ✅ Seeded default running daily bonus rate: 10%');
+    }
   } catch (error) {
     console.error('[Seed] Warning: Error checking/seeding Super Admin:', error);
   }

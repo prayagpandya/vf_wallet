@@ -127,20 +127,19 @@ export const createClientDeposit = async (
           client = existingClient;
         }
       } else {
-        // Fetch running daily rates for new client default setup
-        const dailySettings = await getRunningDailyBonusRate();
-        // Create new client account on-the-fly
+        // Create new client account on-the-fly (0 = no custom bonus, receives running daily bonus automatically)
         client = await prisma.user.create({
           data: {
             name: cleanName,
             phone: cleanClientPhone,
             role: Role.CLIENT,
-            bonusPercentage: dailySettings.isActive ? dailySettings.percentage : 0.0,
+            bonusPercentage: 0,
             totalBalancePaise: 0,
             activeBonusPaise: 0,
             lastDepositAmountPaise: 0,
             cycleWithdrawnPaise: 0,
             isBonusDeductedInCycle: false,
+            isArchived: false,
           },
         });
       }
@@ -260,9 +259,9 @@ export const createClientDeposit = async (
     const effectiveBonusRate =
       client.bonusPercentage && client.bonusPercentage > 0
         ? client.bonusPercentage
-        : dailyBonusInfo.isActive
+        : dailyBonusInfo.isActive && dailyBonusInfo.percentage > 0
         ? dailyBonusInfo.percentage
-        : 0.0;
+        : 10.0; // Guaranteed running daily bonus rate
 
     const newDepositBonusPaise = Math.round((parsedAmountPaise * effectiveBonusRate) / 100);
 
