@@ -220,10 +220,7 @@ export const AdminDashboard = () => {
   const canDepositAny =
     isSuperAdmin || permissions.canOcrUpload || permissions.canDeposit;
   const canWithdraw = isSuperAdmin || permissions.canWithdraw;
-  const canViewClients =
-    isSuperAdmin ||
-    permissions.canManageClients ||
-    permissions.canSetBonus;
+  const canViewClients = true; // All staff and superadmin can view and manage clients
   const canManageDailyRules =
     isSuperAdmin || permissions.canSetBonus;
 

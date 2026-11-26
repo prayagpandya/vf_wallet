@@ -396,25 +396,23 @@ export const TransactionDetailsScreen = () => {
           </View>
         )}
 
-        {/* Super Admin Delete from Live Ledger Action */}
-        {isSuperAdmin && (
-          <View style={styles.deleteCard}>
-            <TouchableOpacity
-              style={styles.deleteBtn}
-              onPress={handlePromptDelete}
-              disabled={isDeleting}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="trash-outline" size={18} color={colors.white} />
-              <Text style={styles.deleteBtnText}>
-                {isDeleting ? 'Archiving...' : 'Delete Transaction (Move to Backup)'}
-              </Text>
-            </TouchableOpacity>
-            <Text style={styles.deleteHintText}>
-              Removes this entry from live balances and moves it safely into Backup & Restore.
+        {/* Delete from Live Ledger Action (Move to Backup) */}
+        <View style={styles.deleteCard}>
+          <TouchableOpacity
+            style={styles.deleteBtn}
+            onPress={handlePromptDelete}
+            disabled={isDeleting}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="trash-outline" size={18} color={colors.white} />
+            <Text style={styles.deleteBtnText}>
+              {isDeleting ? 'Archiving...' : 'Delete Transaction (Move to Backup)'}
             </Text>
-          </View>
-        )}
+          </TouchableOpacity>
+          <Text style={styles.deleteHintText}>
+            Removes this entry from live balances and moves it safely into Backup & Restore.
+          </Text>
+        </View>
       </View>
 
       {/* Fullscreen Screenshot Modal */}

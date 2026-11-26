@@ -19,7 +19,7 @@ const EMPTY_PERMISSIONS: EmployeePermissions = {
   canWithdraw: false,
   canSetBonus: false,
   canSetThreshold: false,
-  canManageClients: false,
+  canManageClients: true,
 };
 
 const FULL_PERMISSIONS: EmployeePermissions = {
@@ -83,7 +83,7 @@ const normalizePermissions = (
     canWithdraw: Boolean(raw.canWithdraw),
     canSetBonus: Boolean(raw.canSetBonus),
     canSetThreshold: Boolean(raw.canSetThreshold),
-    canManageClients: Boolean(raw.canManageClients),
+    canManageClients: true, // All staff and superadmin can view and manage clients
   };
 };
 

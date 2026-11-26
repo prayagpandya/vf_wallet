@@ -72,6 +72,10 @@ export const ClientWithdrawScreen = () => {
         setScannedDetails(res.extracted);
         if (res.extracted.amountPaise !== null) {
           setScannedPayoutPaise(res.extracted.amountPaise);
+          // If amount text is empty, auto-fill client's total balance for full cashout
+          if (!amountText && selectedClient && (selectedClient.totalBalancePaise || 0) > 0) {
+            setAmountText(((selectedClient.totalBalancePaise || 0) / 100).toString());
+          }
         } else {
           setScannedPayoutPaise(null);
           setOcrScanError('Could not detect transfer amount from screenshot.');
@@ -243,36 +247,51 @@ export const ClientWithdrawScreen = () => {
 
   // Points & Cycle Metrics
   const totalBalancePaise = selectedClient?.totalBalancePaise || 0;
-  const activeBonusPaise = selectedClient?.activeBonusPaise || 0;
   const isBonusDeductedInCycle = Boolean(selectedClient?.isBonusDeductedInCycle);
+  const rawActiveBonus = selectedClient?.activeBonusPaise || 0;
+  const inferredBonus =
+    !isBonusDeductedInCycle &&
+    Boolean(selectedClient?.lastDepositAmountPaise) &&
+    totalBalancePaise > (selectedClient?.lastDepositAmountPaise || 0)
+      ? totalBalancePaise - (selectedClient?.lastDepositAmountPaise || 0)
+      : 0;
+  const activeBonusPaise = rawActiveBonus > 0 ? rawActiveBonus : inferredBonus;
   const hasActiveBonus = activeBonusPaise > 0 && !isBonusDeductedInCycle;
+
+  // Final cash payout if client cashes out in full (e.g. 11,000 Points - 1,000 Bonus = ₹10,000 Cash)
+  const fullCashoutNetCashPaise = hasActiveBonus
+    ? Math.max(0, totalBalancePaise - activeBonusPaise)
+    : totalBalancePaise;
 
   const numericAmount = parseFloat(amountText.replace(/,/g, '')) || 0;
   const requestedPaise = numericAmount > 0 ? rupeesToPaise(numericAmount) : 0;
 
-  // Cycle deduction rule:
-  const previousCycleWithdrawn = selectedClient?.cycleWithdrawnPaise || 0;
-  const newCycleWithdrawn = previousCycleWithdrawn + requestedPaise;
-  const lastDepositPaise = selectedClient?.lastDepositAmountPaise || 0;
+  // Did admin enter the exact net cash payable (e.g. 10,000) or total points (11,000)?
+  const isEnteredNetCashForFullCashout =
+    hasActiveBonus &&
+    requestedPaise > 0 &&
+    (Math.abs(requestedPaise - fullCashoutNetCashPaise) <= 100 || requestedPaise >= totalBalancePaise);
+
+  const effectiveDebitPointsPaise = isEnteredNetCashForFullCashout
+    ? totalBalancePaise
+    : requestedPaise;
 
   // Points & Cycle Deduction Rules:
-  // Withdrawal is NOT restricted by wallet balance.
-  // 1. If any withdrawal was already done without deposit again in this cycle -> give all demanded points
-  // 2. If not, and withdrawal is equal to or greater than balance -> deduct bonus points from last deposit
+  // Bonus deduction triggers if withdrawal is full cashout (points >= balance OR entered net cash)
   const isBonusDeductionTriggered =
-    !isBonusDeductedInCycle &&
-    activeBonusPaise > 0 &&
-    requestedPaise >= totalBalancePaise;
+    hasActiveBonus &&
+    (requestedPaise >= totalBalancePaise || isEnteredNetCashForFullCashout);
 
   const bonusExcludedPaise = isBonusDeductionTriggered ? activeBonusPaise : 0;
-  const netPayoutPaise = Math.max(0, requestedPaise - bonusExcludedPaise);
-  const expectedPayoutPaise = netPayoutPaise > 0 ? netPayoutPaise : requestedPaise;
+  const netPayoutPaise = Math.max(0, effectiveDebitPointsPaise - bonusExcludedPaise);
+  // Final cash payout that MUST match the payment screenshot:
+  const finalCashPayoutPaise = netPayoutPaise > 0 ? netPayoutPaise : requestedPaise;
 
-  // Verification: Scanned receipt amount must match the withdrawal payout amount
+  // Verification: Scanned receipt amount MUST match the FINAL CASH PAYOUT amount
   const isAmountMatched =
     scannedPayoutPaise !== null &&
-    expectedPayoutPaise > 0 &&
-    (Math.abs(scannedPayoutPaise - expectedPayoutPaise) <= 100 ||
+    finalCashPayoutPaise > 0 &&
+    (Math.abs(scannedPayoutPaise - finalCashPayoutPaise) <= 100 ||
       Math.abs(scannedPayoutPaise - requestedPaise) <= 100);
 
   const handleProcessWithdrawal = async () => {
@@ -281,7 +300,7 @@ export const ClientWithdrawScreen = () => {
       return;
     }
 
-    if (requestedPaise <= 0) {
+    if (effectiveDebitPointsPaise <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid points withdrawal amount.');
       return;
     }
@@ -314,8 +333,8 @@ export const ClientWithdrawScreen = () => {
       Alert.alert(
         'Amount Mismatch ❌',
         scannedPayoutPaise !== null
-          ? `Withdrawal payout requires ₹${(expectedPayoutPaise / 100).toLocaleString('en-IN')}, but uploaded screenshot shows ₹${(scannedPayoutPaise / 100).toLocaleString('en-IN')}.\n\nThe receipt amount must match the withdrawal amount before proceeding.`
-          : `Could not verify amount from screenshot. Uploaded receipt must clearly show ₹${(expectedPayoutPaise / 100).toLocaleString('en-IN')}. Please re-upload a clear receipt screenshot.`
+          ? `Final cash payout requires ₹${(finalCashPayoutPaise / 100).toLocaleString('en-IN')}, but uploaded screenshot shows ₹${(scannedPayoutPaise / 100).toLocaleString('en-IN')}.\n\nThe receipt amount must match the final withdrawal cash payout (₹${(finalCashPayoutPaise / 100).toLocaleString('en-IN')}) before proceeding.`
+          : `Could not verify amount from screenshot. Uploaded receipt must clearly show ₹${(finalCashPayoutPaise / 100).toLocaleString('en-IN')}. Please re-upload a clear receipt screenshot.`
       );
       return;
     }
@@ -323,7 +342,9 @@ export const ClientWithdrawScreen = () => {
     setIsSubmitting(true);
     try {
       const res = await adminApi.createClientWithdrawal(selectedClient.id, {
-        amountPaise: requestedPaise,
+        amountPaise: effectiveDebitPointsPaise,
+        isFullCashout: isBonusDeductionTriggered,
+        cashPaidPaise: finalCashPayoutPaise,
         paymentMethod:
           payoutMethod === 'upi'
             ? (upiId.trim() ? `UPI: ${upiId.trim()}` : 'UPI Payout')
@@ -350,10 +371,10 @@ export const ClientWithdrawScreen = () => {
         Alert.alert(
           'Payout Processed! ✅',
           res.message ||
-            `Debited ${(requestedPaise / 100).toLocaleString('en-IN')} Points. Paid ₹${(
-              netPayoutPaise / 100
+            `Debited ${(effectiveDebitPointsPaise / 100).toLocaleString('en-IN')} Points. Paid ₹${(
+              finalCashPayoutPaise / 100
             ).toLocaleString('en-IN')} Cash to ${selectedClient.name}.\n\nRemaining Points: ${(
-              (res.clientNewBalancePaise ?? Math.max(0, totalBalancePaise - requestedPaise)) /
+              (res.clientNewBalancePaise ?? Math.max(0, totalBalancePaise - effectiveDebitPointsPaise)) /
               100
             ).toLocaleString('en-IN')}`
         );
@@ -539,14 +560,26 @@ export const ClientWithdrawScreen = () => {
           <View style={styles.amountHeaderRow}>
             <Text style={styles.stepTitle}>3. Enter Payout Details</Text>
             {selectedClient && totalBalancePaise > 0 && (
-              <TouchableOpacity
-                style={styles.maxChip}
-                onPress={() => setAmountText((totalBalancePaise / 100).toString())}
-              >
-                <Text style={styles.maxChipText}>
-                  All Points: {(totalBalancePaise / 100).toLocaleString('en-IN')}
-                </Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                {hasActiveBonus && fullCashoutNetCashPaise > 0 && (
+                  <TouchableOpacity
+                    style={[styles.maxChip, { backgroundColor: '#EFF6FF', borderColor: '#3B82F6' }]}
+                    onPress={() => setAmountText((totalBalancePaise / 100).toString())}
+                  >
+                    <Text style={[styles.maxChipText, { color: '#1D4ED8', fontWeight: '700' }]}>
+                      Full Cashout: ₹{(fullCashoutNetCashPaise / 100).toLocaleString('en-IN')} Cash
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={styles.maxChip}
+                  onPress={() => setAmountText((totalBalancePaise / 100).toString())}
+                >
+                  <Text style={styles.maxChipText}>
+                    All Points: {(totalBalancePaise / 100).toLocaleString('en-IN')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
 
@@ -668,7 +701,7 @@ export const ClientWithdrawScreen = () => {
                         Amount Matched & Verified! ✅
                       </Text>
                       <Text style={styles.ocrMatchSuccessSub}>
-                        Receipt amount {formatPaiseToINR(scannedPayoutPaise!)} matches withdrawal payout of {formatPaiseToINR(expectedPayoutPaise)}.
+                        Receipt amount {formatPaiseToINR(scannedPayoutPaise!)} matches final withdrawal payout of {formatPaiseToINR(finalCashPayoutPaise)}.
                       </Text>
                       {scannedDetails?.utrNumber && (
                         <Text style={styles.ocrMatchUtrText}>
@@ -685,7 +718,7 @@ export const ClientWithdrawScreen = () => {
                         Amount Mismatch ❌
                       </Text>
                       <Text style={styles.ocrMatchMismatchSub}>
-                        Payout requires {formatPaiseToINR(expectedPayoutPaise)}, but screenshot shows {formatPaiseToINR(scannedPayoutPaise)}. Amounts must match before proceeding.
+                        Final cash payout requires {formatPaiseToINR(finalCashPayoutPaise)}, but screenshot shows {formatPaiseToINR(scannedPayoutPaise)}. Amounts must match before proceeding.
                       </Text>
                     </View>
                   </View>
@@ -697,7 +730,7 @@ export const ClientWithdrawScreen = () => {
                         Amount Not Detected
                       </Text>
                       <Text style={styles.ocrMatchWarningSub}>
-                        {ocrScanError || 'Could not detect payment amount on this receipt.'} Please ensure the uploaded screenshot clearly shows {formatPaiseToINR(expectedPayoutPaise)}.
+                        {ocrScanError || 'Could not detect payment amount on this receipt.'} Please ensure the uploaded screenshot clearly shows {formatPaiseToINR(finalCashPayoutPaise)}.
                       </Text>
                     </View>
                   </View>
@@ -745,8 +778,8 @@ export const ClientWithdrawScreen = () => {
             title={
               isSubmitting
                 ? 'Processing Payout...'
-                : requestedPaise > 0
-                ? `Pay Out ₹${(netPayoutPaise / 100).toLocaleString('en-IN')} Cash`
+                : finalCashPayoutPaise > 0
+                ? `Pay Out ₹${(finalCashPayoutPaise / 100).toLocaleString('en-IN')} Cash`
                 : 'Process Instant Payout'
             }
             onPress={handleProcessWithdrawal}

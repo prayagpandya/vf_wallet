@@ -332,6 +332,8 @@ export const adminApi = {
     clientId: string,
     data: {
       amountPaise: number;
+      isFullCashout?: boolean;
+      cashPaidPaise?: number;
       paymentApp?: string;
       paymentMethod?: string;
       upiId?: string;

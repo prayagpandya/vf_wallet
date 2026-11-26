@@ -52,10 +52,7 @@ const AdminTabNavigator = () => {
   const { tabBarStyle } = getAdaptiveTabBarStyle(insets);
   useEmployeeLocationTracker();
 
-  const canViewClients =
-    isSuperAdmin ||
-    permissions.canManageClients ||
-    permissions.canSetBonus;
+  const canViewClients = true; // All staff and superadmin can view and manage clients
   const canDeposit =
     isSuperAdmin || permissions.canOcrUpload || permissions.canDeposit;
   const canWithdraw = isSuperAdmin || permissions.canWithdraw;

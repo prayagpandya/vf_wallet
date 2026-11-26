@@ -119,11 +119,11 @@ router.get('/employees/locations', getEmployeeLocations);
 // POST /api/admin/backup/reset-app (Super Admin one-click zero state reset)
 router.post('/backup/reset-app', requireSuperAdmin, resetApplicationData);
 
-// POST /api/admin/backup/delete-client/:id (Super Admin soft-delete single client & their transactions)
-router.post('/backup/delete-client/:id', requireSuperAdmin, deleteSingleClient);
+// POST /api/admin/backup/delete-client/:id (Soft-delete single client & their transactions to backup)
+router.post('/backup/delete-client/:id', deleteSingleClient);
 
-// POST /api/admin/backup/delete-transaction/:id (Super Admin soft-delete single transaction)
-router.post('/backup/delete-transaction/:id', requireSuperAdmin, deleteSingleTransaction);
+// POST /api/admin/backup/delete-transaction/:id (Soft-delete single transaction to backup)
+router.post('/backup/delete-transaction/:id', deleteSingleTransaction);
 
 // GET /api/admin/backup/snapshots (List all archived snapshots and deleted items)
 router.get('/backup/snapshots', getBackupSnapshotsList);

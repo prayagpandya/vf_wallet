@@ -130,21 +130,13 @@ export const createUser = async (req: AuthenticatedRequest, res: Response) => {
     const targetRole: Role =
       requestedType === 'EMPLOYEE' ? Role.EMPLOYEE : Role.CLIENT;
 
-    // Authorization check
-    if (targetRole === Role.EMPLOYEE) {
-      if (!req.user.isSuperAdmin) {
-        return res.status(403).json({
-          success: false,
-          error: 'Only Super Admin can create Employee accounts.',
-        });
-      }
-    } else {
-      if (!req.user.isSuperAdmin && !req.user.permissions.canManageClients) {
-        return res.status(403).json({
-          success: false,
-          error: 'Access denied: You do not have permission to create clients.',
-        });
-      }
+    // Authorization check: Only Super Admin can create Employee accounts.
+    // Client accounts can be created by all staff and Super Admin.
+    if (targetRole === Role.EMPLOYEE && !req.user.isSuperAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: 'Only Super Admin can create Employee accounts.',
+      });
     }
 
     if (!name || typeof name !== 'string' || !name.trim()) {
@@ -459,21 +451,13 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(404).json({ success: false, error: 'Account not found.' });
     }
 
-    // Permission checks
-    if (!isClientRole(target.role)) {
-      if (!req.user.isSuperAdmin) {
-        return res.status(403).json({
-          success: false,
-          error: 'Only Super Admin can modify Employee or Admin accounts.',
-        });
-      }
-    } else {
-      if (!req.user.isSuperAdmin && !req.user.permissions.canManageClients) {
-        return res.status(403).json({
-          success: false,
-          error: 'Access denied: Client Data Management permission required.',
-        });
-      }
+    // Permission checks: Only Super Admin can modify Employee or Admin accounts.
+    // Client accounts can be modified by all staff and Super Admin.
+    if (!isClientRole(target.role) && !req.user.isSuperAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: 'Only Super Admin can modify Employee or Admin accounts.',
+      });
     }
 
     const updateData: any = {};
@@ -763,17 +747,12 @@ export const toggleBlockUser = async (
       });
     }
 
-    if (!isClientRole(user.role)) {
-      if (!req.user.isSuperAdmin) {
-        return res.status(403).json({
-          success: false,
-          error: 'Only Super Admin can block or unblock Employee accounts.',
-        });
-      }
-    } else if (!req.user.isSuperAdmin && !req.user.permissions.canManageClients) {
+    // Only Super Admin can block or unblock Employee accounts.
+    // Client accounts can be blocked or unblocked by all staff and Super Admin.
+    if (!isClientRole(user.role) && !req.user.isSuperAdmin) {
       return res.status(403).json({
         success: false,
-        error: 'Access denied: Client Management permission required.',
+        error: 'Only Super Admin can block or unblock Employee accounts.',
       });
     }
 
@@ -1131,10 +1110,10 @@ export const resetApplicationData = async (req: AuthenticatedRequest, res: Respo
  */
 export const deleteSingleTransaction = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!req.user || !req.user.isSuperAdmin) {
-      return res.status(403).json({
+    if (!req.user) {
+      return res.status(401).json({
         success: false,
-        error: 'Only Super Admin can delete transactions.',
+        error: 'Authentication required.',
       });
     }
 
@@ -1156,14 +1135,14 @@ export const deleteSingleTransaction = async (req: AuthenticatedRequest, res: Re
 
 /**
  * POST /api/admin/backup/delete-client/:id
- * Super Admin soft-deletes a single client and their transactions, moving them into Backup & Restore.
+ * Staff or Super Admin soft-deletes a single client and their transactions, moving them into Backup & Restore.
  */
 export const deleteSingleClient = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!req.user || !req.user.isSuperAdmin) {
-      return res.status(403).json({
+    if (!req.user) {
+      return res.status(401).json({
         success: false,
-        error: 'Only Super Admin can delete clients.',
+        error: 'Authentication required.',
       });
     }
 

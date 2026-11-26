@@ -437,7 +437,28 @@ export const createClientWithdrawal = async (
     // Withdrawal is NOT restricted by current wallet points balance.
     // 1. Check if any withdrawal was already done without deposit again in this cycle:
     const wasWithdrawalAlreadyDoneInCycle = Boolean(client.isBonusDeductedInCycle);
-    const activeBonusPaise = client.activeBonusPaise || 0;
+    const rawActiveBonus = client.activeBonusPaise || 0;
+    const inferredBonus =
+      !wasWithdrawalAlreadyDoneInCycle &&
+      client.lastDepositAmountPaise &&
+      client.totalBalancePaise > client.lastDepositAmountPaise
+        ? client.totalBalancePaise - client.lastDepositAmountPaise
+        : 0;
+    const activeBonusPaise = rawActiveBonus > 0 ? rawActiveBonus : inferredBonus;
+
+    // Full cashout net cash = Total Points - Active Bonus (e.g. 11,000 - 1,000 = 10,000 cash)
+    const fullCashoutNetCashPaise = Math.max(0, client.totalBalancePaise - activeBonusPaise);
+    const isEnteredNetCashForFullCashout =
+      Boolean(req.body.isFullCashout) ||
+      (activeBonusPaise > 0 &&
+        !wasWithdrawalAlreadyDoneInCycle &&
+        Math.abs(parsedAmountPaise - fullCashoutNetCashPaise) <= 100);
+
+    // If client requested full cashout by typing net cash (e.g. 10,000) or clicking full cashout
+    if (isEnteredNetCashForFullCashout && parsedAmountPaise < client.totalBalancePaise) {
+      parsedAmountPaise = client.totalBalancePaise;
+    }
+
     const previousCycleWithdrawn = client.cycleWithdrawnPaise || 0;
     const newCycleWithdrawn = previousCycleWithdrawn + parsedAmountPaise;
 
@@ -450,8 +471,11 @@ export const createClientWithdrawal = async (
       isBonusDeductionTriggered = false;
     } else {
       // If no withdrawal done yet in this cycle:
-      // If withdrawal is equal to balance or greater than balance: deduct bonus points from last deposit
-      if (parsedAmountPaise >= client.totalBalancePaise && activeBonusPaise > 0) {
+      // If withdrawal is equal to balance or full cashout: deduct bonus points from last deposit
+      if (
+        (parsedAmountPaise >= client.totalBalancePaise || isEnteredNetCashForFullCashout) &&
+        activeBonusPaise > 0
+      ) {
         bonusExcludedPaise = activeBonusPaise;
         isBonusDeductionTriggered = true;
       } else {

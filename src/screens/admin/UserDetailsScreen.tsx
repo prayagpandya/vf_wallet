@@ -240,7 +240,7 @@ export const UserDetailsScreen = () => {
   }, [loadDetails]);
 
   const isEmployee = account?.accountType === 'EMPLOYEE';
-  const canEditData = isSuperAdmin || (!isEmployee && permissions.canManageClients);
+  const canEditData = isSuperAdmin || !isEmployee; // All staff and superadmin can edit client data
   const canEditBonus = isSuperAdmin || (!isEmployee && permissions.canSetBonus);
   const canDepositForClient =
     !isEmployee && (isSuperAdmin || permissions.canOcrUpload || permissions.canDeposit);
@@ -1471,8 +1471,8 @@ export const UserDetailsScreen = () => {
           </View>
         )}
 
-        {/* Super Admin Delete Client to Backup */}
-        {isSuperAdmin && !isEmployee && (
+        {/* Delete Client to Backup */}
+        {!isEmployee && (
           <View style={[styles.card, styles.dangerCard]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
               <Ionicons name="warning-outline" size={16} color={colors.danger} />

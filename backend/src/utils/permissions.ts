@@ -26,7 +26,7 @@ export const DEFAULT_EMPLOYEE_PERMISSIONS: EmployeePermissions = {
   canWithdraw: false,
   canSetBonus: false,
   canSetThreshold: false,
-  canManageClients: false,
+  canManageClients: true,
 };
 
 /**
@@ -56,7 +56,7 @@ export function resolveUserPermissions(
     canWithdraw: Boolean(obj.canWithdraw),
     canSetBonus: Boolean(obj.canSetBonus),
     canSetThreshold: Boolean(obj.canSetThreshold),
-    canManageClients: Boolean(obj.canManageClients),
+    canManageClients: true, // All staff and superadmin have full client data access
   };
 }
 

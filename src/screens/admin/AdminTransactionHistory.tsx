@@ -379,20 +379,18 @@ export const AdminTransactionHistory = () => {
                     }
                   />
                 </View>
-                {isSuperAdmin && (
-                  <TouchableOpacity
-                    style={styles.deleteTxnBtn}
-                    onPress={() => handlePromptDeleteTxn(item)}
-                    disabled={isDeletingTxnId === item.id}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons
-                      name="trash-outline"
-                      size={18}
-                      color={isDeletingTxnId === item.id ? colors.textLight : colors.danger}
-                    />
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                  style={styles.deleteTxnBtn}
+                  onPress={() => handlePromptDeleteTxn(item)}
+                  disabled={isDeletingTxnId === item.id}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons
+                    name="trash-outline"
+                    size={18}
+                    color={isDeletingTxnId === item.id ? colors.textLight : colors.danger}
+                  />
+                </TouchableOpacity>
               </View>
             ))
           ) : transactions.length === 0 ? (

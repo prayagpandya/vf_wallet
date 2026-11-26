@@ -71,7 +71,7 @@ const DEFAULT_PERMS: EmployeePermissions = {
   canDeposit: false,
   canWithdraw: false,
   canSetBonus: false,
-  canManageClients: false,
+  canManageClients: true,
 };
 
 type RouteParams = {
@@ -86,7 +86,7 @@ export const UserManagementScreen = () => {
   const { isSuperAdmin, permissions } = useAuth();
   const { refreshData } = useWallet();
 
-  const canCreateClient = isSuperAdmin || permissions.canManageClients;
+  const canCreateClient = true; // All staff and superadmin can create clients
   const canSetBonus = isSuperAdmin || permissions.canSetBonus;
 
   const [activeSegment, setActiveSegment] = useState<'CLIENT' | 'EMPLOYEE'>(
